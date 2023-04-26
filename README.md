@@ -4,7 +4,7 @@
 
 Non boiler-plate code for the server can be found in `beehive-server/server/server.go`
 
-The client can be run locally with `go run beehive-server/server/server.go`
+The client can be run locally from `beehive-server/` with `go run server/server.go`
 
 ## Client
 
