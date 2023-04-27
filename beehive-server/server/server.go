@@ -57,16 +57,18 @@ func ws(c *gin.Context) {
 	}()
 
 	for {
+		// handle incoming message
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Failed to read message from WebSocket:", err)
 			break
 		}
-		log.Println("Received message from WebSocket:", string(message))
-
 		strMessage := string(message)
+		log.Println("Received message from WebSocket:", strMessage)
 
+		// check if it's an auth message
 		if strings.HasPrefix(strMessage, passwordPrefix) {
+			// this could be broken into a WSResponse struct along with the other data variables
 			data := map[string]interface{}{
 				"isAuthed":    false,
 				"messageType": "auth",
@@ -95,6 +97,7 @@ func ws(c *gin.Context) {
 				log.Println("Failed to write message to WebSocket:", err)
 				break
 			}
+			// otherwise it's a chat message, send it to the chat if the user has been authenticated
 		} else {
 			authorizedConnMutex.Lock()
 			isAuthorized := authorizedConn[conn]
@@ -125,6 +128,7 @@ func ws(c *gin.Context) {
 				break
 			}
 
+			// send the message to all current connections
 			authorizedConnMutex.Lock()
 			for authedConn := range authorizedConn {
 				out := meOut
