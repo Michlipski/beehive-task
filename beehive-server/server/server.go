@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -38,7 +38,7 @@ var (
 	passwordPrefix   = "password:"
 
 	// list of messages in the chat
-	messages = []Message{{"id0", "an existing message"}}
+	messages = []Message{{uuid.New().String(), "an existing message"}}
 )
 
 func ws(c *gin.Context) {
@@ -88,58 +88,56 @@ func ws(c *gin.Context) {
 			out, err := json.Marshal(data)
 			if err != nil {
 				log.Println("Failed to marshal websocket data to JSON:", err)
-				authorizedConnMutex.Unlock()
 				break
 			}
-			err = conn.WriteMessage(websocket.TextMessage, []byte(string(out)))
+			err = conn.WriteMessage(websocket.TextMessage, out)
 			if err != nil {
 				log.Println("Failed to write message to WebSocket:", err)
 				break
 			}
 		} else {
 			authorizedConnMutex.Lock()
-			_, isAuthorized := authorizedConn[conn]
+			isAuthorized := authorizedConn[conn]
+			authorizedConnMutex.Unlock()
 
-			if isAuthorized {
-				newMessage := Message{fmt.Sprintf("id%d", len(messages)), strMessage}
-				messages = append(messages, newMessage)
-
-				data := map[string]interface{}{
-					"isAuthed":    true,
-					"isMe":        true,
-					"messageType": "newMessage",
-					"value":       newMessage,
-				}
-				meOut, err := json.Marshal(data)
-				if err != nil {
-					log.Println("Failed to marshal websocket data to JSON:", err)
-					authorizedConnMutex.Unlock()
-					break
-				}
-				data["isMe"] = false
-				othersOut, err := json.Marshal(data)
-				if err != nil {
-					log.Println("Failed to marshal websocket data to JSON:", err)
-					authorizedConnMutex.Unlock()
-					break
-				}
-				for authedConn := range authorizedConn {
-					if authedConn != conn {
-						err = authedConn.WriteMessage(websocket.TextMessage, []byte(string(othersOut)))
-						if err != nil {
-							log.Println("Failed to write message to WebSocket:", err)
-							break
-						}
-					} else {
-						err = authedConn.WriteMessage(websocket.TextMessage, []byte(string(meOut)))
-						if err != nil {
-							log.Println("Failed to write message to WebSocket:", err)
-							break
-						}
-					}
-				}
+			if !isAuthorized {
+				break
 			}
 
+			newMessage := Message{uuid.New().String(), strMessage}
+			messages = append(messages, newMessage)
+
+			data := map[string]interface{}{
+				"isAuthed":    true,
+				"isMe":        true,
+				"messageType": "newMessage",
+				"value":       newMessage,
+			}
+			meOut, err := json.Marshal(data)
+			if err != nil {
+				log.Println("Failed to marshal websocket data to JSON:", err)
+				break
+			}
+			data["isMe"] = false
+			othersOut, err := json.Marshal(data)
+			if err != nil {
+				log.Println("Failed to marshal websocket data to JSON:", err)
+				break
+			}
+
+			authorizedConnMutex.Lock()
+			for authedConn := range authorizedConn {
+				out := meOut
+				if authedConn != conn {
+					out = othersOut
+				}
+				err = authedConn.WriteMessage(websocket.TextMessage, out)
+				if err != nil {
+					log.Println("Failed to write message to WebSocket:", err)
+					// could maybe close the connection and delete from the mutex here
+					continue
+				}
+			}
 			authorizedConnMutex.Unlock()
 		}
 	}

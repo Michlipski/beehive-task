@@ -100,6 +100,7 @@ export default function Home() {
           )}
           {loggedIn && (
             <>
+              <div className='grow shrink' />
               <div className='overflow-auto'>
                 <table className='w-full'>
                   <tbody>
